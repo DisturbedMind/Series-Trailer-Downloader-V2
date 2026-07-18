@@ -42,6 +42,11 @@ from pathlib import Path
 from typing import Iterable
 
 yt_dlp = None
+NO_WINDOW_SUBPROCESS = (
+    {"creationflags": subprocess.CREATE_NO_WINDOW}
+    if sys.platform == "win32" and hasattr(subprocess, "CREATE_NO_WINDOW")
+    else {}
+)
 
 
 def command_version_at_least(executable: str, args: list[str], minimum: tuple[int, int]) -> bool:
@@ -51,6 +56,7 @@ def command_version_at_least(executable: str, args: list[str], minimum: tuple[in
             capture_output=True,
             text=True,
             timeout=3,
+            **NO_WINDOW_SUBPROCESS,
         )
     except Exception:
         return False
@@ -1924,7 +1930,13 @@ def probe_media_stream(path: Path, timeout: int = 20) -> tuple[bool, str, int | 
         str(path),
     ]
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            **NO_WINDOW_SUBPROCESS,
+        )
     except subprocess.TimeoutExpired:
         return False, "ffprobe timed out", None, None
     except Exception as exc:
@@ -1973,7 +1985,13 @@ def is_invalid_media_error_message(message: object) -> bool:
 
 
 def run_ffmpeg(command: list[str], cancel_event: threading.Event | None = None) -> None:
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        **NO_WINDOW_SUBPROCESS,
+    )
     while True:
         try:
             check_cancel(cancel_event)
@@ -2002,7 +2020,7 @@ def install_dependencies() -> int:
         "-File",
         str(INSTALLER_PATH),
     ]
-    return subprocess.call(command)
+    return subprocess.call(command, **NO_WINDOW_SUBPROCESS)
 
 
 def ffmpeg_video_encoder_option_sets(encoder: str, preset: str, crf: int) -> list[tuple[str, list[str]]]:

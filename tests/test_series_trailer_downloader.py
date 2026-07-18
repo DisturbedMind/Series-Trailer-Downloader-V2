@@ -155,5 +155,21 @@ class DiscoveryTests(unittest.TestCase):
         )
 
 
+class ProcessLaunchTests(unittest.TestCase):
+    @patch.object(app.subprocess, "Popen")
+    def test_ffmpeg_uses_windows_no_console_flag(self, popen):
+        process = popen.return_value
+        process.communicate.return_value = ("", "")
+        process.returncode = 0
+
+        app.run_ffmpeg(["ffmpeg", "-version"])
+
+        kwargs = popen.call_args.kwargs
+        if sys.platform == "win32":
+            self.assertEqual(kwargs["creationflags"], app.subprocess.CREATE_NO_WINDOW)
+        else:
+            self.assertNotIn("creationflags", kwargs)
+
+
 if __name__ == "__main__":
     unittest.main()
