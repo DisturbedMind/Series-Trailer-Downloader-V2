@@ -1,0 +1,23 @@
+# Local secrets and machine-specific runtime state
+series_trailer_downloader.settings.json
+youtube-cookies.txt
+trailer-results.json
+
+# Python/runtime cache
+__pycache__/
+*.py[cod]
+
+# Downloader scratch files and backups
+.trailer-download-tmp/
+*.part
+*.ytdl
+*.tmp
+*.old
+
+# Logs, tests, and packaged output
+*.log
+.pytest_cache/
+dist/
+build/
+*.zip
+*.7z
