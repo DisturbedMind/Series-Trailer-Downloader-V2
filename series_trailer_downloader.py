@@ -357,6 +357,30 @@ def is_season_specific_trailer(series: SeriesFolder, text: str) -> bool:
     )
 
 
+def ambiguous_single_token_title_matches(series: SeriesFolder, candidate_title: str) -> bool:
+    """Require an exact leading title for ambiguous one-token show names such as '24' or 'You'."""
+    if len(title_match_tokens(series.title)) != 1:
+        return True
+
+    folded_title = fold_text_ascii(series.title).strip()
+    folded_candidate = fold_text_ascii(candidate_title).strip()
+    if not folded_title or not folded_candidate:
+        return False
+
+    title_pattern = re.escape(folded_title).replace(r"\ ", r"\s+")
+    year_or_kind = r"(?:\s*(?:\(\s*(?:19|20)\d{2}\s*\)|(?:19|20)\d{2}|\(\s*(?:tv\s+)?series\s*\)))?"
+    separator = r"\s*(?:[-:|]\s*)?"
+    qualifiers = (
+        r"(?:(?:official|original|main|full|tv|television|series|show|teaser|theatrical|hd|4k|uhd)\s+){0,6}"
+    )
+    return bool(
+        re.match(
+            rf"^{title_pattern}\b{year_or_kind}{separator}{qualifiers}(?:trailer|teaser)\b",
+            folded_candidate,
+        )
+    )
+
+
 def strip_library_title_prefix(title: str) -> str:
     cleaned = title.strip()
     prefix_patterns = (
@@ -1680,6 +1704,8 @@ def score_candidate(series: SeriesFolder, entry: dict, max_duration: int) -> int
     title_number_words = {word for word in title_words if word.isdigit()}
     candidate_years = years_in_text(haystack)
 
+    if not ambiguous_single_token_title_matches(series, title):
+        return None
     if title_words and len(hit_words) < max(1, min(3, len(title_words))):
         return None
     if title_number_words and not (title_number_words & haystack_words):

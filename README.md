@@ -61,6 +61,10 @@ Series-specific matching
 - Season-specific trailers are rejected entirely, including titles containing
   `Season`, `S01 Trailer`, `Series 1 Trailer`, `new season`, or `final season`.
   Episode-specific promos are also rejected, leaving show-level/main trailers.
+- Ambiguous one-token show names such as `24`, `You`, and `From` use strict
+  leading-title matching. For example, `24 Official Trailer` is accepted while
+  `24: Legacy`, `FC 24`, `Number 24`, date references, and titles that merely
+  mention the number are rejected before quality probing.
 - Any playable video already in the show-level `Trailers` folder counts as an
   existing trailer, so the default run does not trample curated media.
 

@@ -180,6 +180,36 @@ class DiscoveryTests(unittest.TestCase):
             ["tmdb", "kinocheck", "youtube-api", "internet-archive", "youtube"],
         )
 
+    def test_numeric_title_requires_exact_main_trailer_prefix(self):
+        series = app.SeriesFolder(Path("24 (2001)"), "24 (2001)", "24", "2001")
+        accepted = (
+            "24 Official Trailer (HD)",
+            "24 - Trailer",
+            "24 (2001) Official TV Series Trailer",
+        )
+        rejected = (
+            "Official Trailer | 24: LEGACY",
+            "24: Legacy Official Trailer",
+            "Number 24 - Official Trailer | Netflix",
+            "EA Sports FC 24 - Official Gameplay Trailer",
+            "Cricket 24 - Official Launch Trailer",
+            "Monsters Inside: The 24 Faces of Billy Milligan | Official Trailer | Netflix",
+            "Taylor Mac's 24-Decade History of Popular Music | Official Trailer | HBO",
+            "BUCHA Official Trailer | Streaming February 24",
+            "WWE 24: The Miz official trailer",
+        )
+
+        for title in accepted:
+            with self.subTest(accepted=title):
+                self.assertIsNotNone(
+                    app.score_candidate(series, {"title": title, "channel": "20th Century", "duration": 120}, 600)
+                )
+        for title in rejected:
+            with self.subTest(rejected=title):
+                self.assertIsNone(
+                    app.score_candidate(series, {"title": title, "channel": "Official", "duration": 120}, 600)
+                )
+
 
 class ProcessLaunchTests(unittest.TestCase):
     def test_download_options_report_progress_and_disable_subtitles(self):
