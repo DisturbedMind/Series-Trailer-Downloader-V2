@@ -23,6 +23,7 @@ import argparse
 import http.client
 import importlib.util
 import json
+import multiprocessing
 import queue
 import random
 import re
@@ -77,11 +78,16 @@ def default_js_runtime_setting() -> str:
     return ",".join(runtimes)
 
 
-SETTINGS_PATH = Path(__file__).with_suffix(".settings.json")
-INSTALLER_PATH = Path(__file__).with_name("install.ps1")
-DEFAULT_COOKIES_PATH = Path(__file__).with_name("youtube-cookies.txt")
-DEFAULT_RESULTS_PATH = Path(__file__).with_name("trailer-results.json")
-DEFAULT_LOG_PATH = Path(__file__).with_name("series_trailer_downloader.log")
+FROZEN = bool(getattr(sys, "frozen", False))
+APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent
+RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", APP_DIR)) if FROZEN else APP_DIR
+SETTINGS_PATH = APP_DIR / "series_trailer_downloader.settings.json"
+INSTALLER_PATH = APP_DIR / "install.ps1"
+if not INSTALLER_PATH.exists():
+    INSTALLER_PATH = RESOURCE_DIR / "install.ps1"
+DEFAULT_COOKIES_PATH = APP_DIR / "youtube-cookies.txt"
+DEFAULT_RESULTS_PATH = APP_DIR / "trailer-results.json"
+DEFAULT_LOG_PATH = APP_DIR / "series_trailer_downloader.log"
 DEFAULT_SEARCH_DELAY = 2.0
 DEFAULT_SERIES_DELAY = 5.0
 DEFAULT_DOWNLOAD_SLEEP_MIN = 3.0
@@ -3000,10 +3006,16 @@ def launch_gui() -> int:
     root.geometry("1040x720")
     root.minsize(900, 620)
     root.configure(bg=palette["hero"])
+    icon_path = RESOURCE_DIR / "assets" / "wolf.ico"
+    if icon_path.exists():
+        try:
+            root.iconbitmap(default=str(icon_path))
+        except tk.TclError:
+            pass
 
     logo_image = None
     header_logo = None
-    logo_path = Path(__file__).with_name("assets") / "wolf-banner.png"
+    logo_path = RESOURCE_DIR / "assets" / "wolf-banner.png"
     if logo_path.exists():
         try:
             logo_image = tk.PhotoImage(file=str(logo_path))
@@ -3893,6 +3905,7 @@ def launch_gui() -> int:
 
 
 def main() -> int:
+    multiprocessing.freeze_support()
     parser = build_arg_parser()
     args = parser.parse_args()
     supplied = supplied_cli_dests(parser, sys.argv[1:])

@@ -91,6 +91,29 @@ Open the GUI:
 python .\series_trailer_downloader.py
 ```
 
+### Windows EXE
+
+The release build runs the same Tkinter GUI without opening a console window.
+Settings, cookies, results, and logs are stored beside the EXE so they persist
+normally when using PyInstaller's one-file mode.
+
+Build a tested release folder and ZIP:
+
+```powershell
+python -m pip install -U -r .\requirements-build.txt
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build_exe.ps1
+```
+
+Outputs:
+
+```text
+dist\Series-Trailer-Downloader-V2.0\Series Trailer Downloader.exe
+dist\Series-Trailer-Downloader-V2.0-Windows-x64.zip
+```
+
+FFmpeg and Deno/Node remain external dependencies. Keep `install.ps1` beside
+the EXE so the GUI's **Install / Repair Dependencies** button can use it.
+
 Preview a library without changing anything:
 
 ```powershell
