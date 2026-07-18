@@ -104,6 +104,14 @@ class DiscoveryTests(unittest.TestCase):
                             "site": "YouTube",
                             "size": 1080,
                             "type": "Trailer",
+                        },
+                        {
+                            "key": "season2",
+                            "name": "Season 2 Official Trailer",
+                            "official": True,
+                            "site": "YouTube",
+                            "size": 1080,
+                            "type": "Trailer",
                         }
                     ]
                 }
@@ -140,20 +148,31 @@ class DiscoveryTests(unittest.TestCase):
             )
         )
 
-    def test_prefers_first_season_over_later_season(self):
-        first = app.score_candidate(
-            self.series,
-            {"title": "The Expanse Season 1 official trailer", "channel": "Prime Video", "duration": 120},
-            600,
+    def test_rejects_all_season_specific_trailers(self):
+        titles = (
+            "The Expanse Season 1 official trailer",
+            "The Expanse Season Four trailer",
+            "The Expanse final season trailer",
+            "The Expanse S02 trailer",
+            "The Expanse Series 3 official teaser",
         )
-        later = app.score_candidate(
-            self.series,
-            {"title": "The Expanse Season 4 official trailer", "channel": "Prime Video", "duration": 120},
-            600,
+        for title in titles:
+            with self.subTest(title=title):
+                self.assertIsNone(
+                    app.score_candidate(
+                        self.series,
+                        {"title": title, "channel": "Prime Video", "duration": 120},
+                        600,
+                    )
+                )
+
+        self.assertIsNotNone(
+            app.score_candidate(
+                self.series,
+                {"title": "The Expanse official TV series trailer", "channel": "Prime Video", "duration": 120},
+                600,
+            )
         )
-        self.assertIsNotNone(first)
-        self.assertIsNotNone(later)
-        self.assertGreater(first, later)
 
     def test_default_sources_are_series_capable(self):
         self.assertEqual(

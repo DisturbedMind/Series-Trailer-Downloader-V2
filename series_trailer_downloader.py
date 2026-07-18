@@ -340,6 +340,23 @@ def has_3d_trailer_marker(series: SeriesFolder, text: str) -> bool:
     return bool(THREE_D_MARKER_RE.search(fold_text_ascii(text)))
 
 
+def is_season_specific_trailer(series: SeriesFolder, text: str) -> bool:
+    """Identify season marketing while allowing phrases such as 'TV series trailer'."""
+    folded = fold_text_ascii(text)
+    series_title = fold_text_ascii(series.title).strip()
+    if series_title:
+        folded = folded.replace(series_title, " ")
+    folded = re.sub(r"\s+", " ", folded)
+    if re.search(r"\bseason\b", folded):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:s|series)\s*0?\d{1,2}\b(?:\s*[-:|])?\s*(?:official\s+)?(?:trailer|teaser|promo)\b",
+            folded,
+        )
+    )
+
+
 def strip_library_title_prefix(title: str) -> str:
     cleaned = title.strip()
     prefix_patterns = (
@@ -1127,6 +1144,8 @@ def collect_tmdb_candidates(
         name_lower = name.lower()
         if any(word in name_lower for word in BAD_TMDB_VIDEO_WORDS):
             continue
+        if is_season_specific_trailer(series, name):
+            continue
         if site == "vimeo":
             url = f"https://vimeo.com/{key}"
             bonus = SOURCE_SCORE_BONUSES["tmdb-vimeo"]
@@ -1628,7 +1647,6 @@ def build_queries(series: SeriesFolder, include_network_queries: bool) -> list[s
                 f"{base} teaser trailer",
                 f"{base} official series trailer",
                 f"{base} official tv series trailer",
-                f"{base} season 1 trailer",
                 f"{base} kinocheck trailer",
                 f"{base} ign trailer",
             ]
@@ -1680,6 +1698,9 @@ def score_candidate(series: SeriesFolder, entry: dict, max_duration: int) -> int
     if not any(word in haystack for word in TRAILER_WORDS):
         return None
 
+    if is_season_specific_trailer(series, title):
+        return None
+
     if any(
         marker in haystack
         for marker in ("subbed", "with subtitles", "english subtitles", "closed captions", "hardcoded subtitles")
@@ -1701,8 +1722,6 @@ def score_candidate(series: SeriesFolder, entry: dict, max_duration: int) -> int
     score += 10 if series.year and series.year in candidate_years else 0
     score += 3 * len(title_number_words & haystack_words)
     score += 5 if any(kind in haystack for kind in ("series trailer", "tv series trailer", "show trailer")) else 0
-    score += 3 if re.search(r"\bseason\s*(?:1|one)\b", haystack) else 0
-    score -= 12 if re.search(r"\bseason\s*(?:[2-9]|[1-9]\d+)\b", haystack) else 0
     score += 2 if "kinocheck" in haystack else 0
     score += 3 if any(word in haystack_words for word in ("english", "eng")) else 0
     score -= 8 * sum(1 for word in BAD_WORDS if word in haystack)

@@ -58,8 +58,9 @@ Series-specific matching
   `Show (2024) {tmdb-12345}`.
 - Network and streaming channels such as Netflix, HBO/Max, Prime Video, Apple
   TV, Disney+, Hulu, Paramount+, BBC, and others receive official-source weight.
-- Season 1 trailers are preferred; later-season trailers are retained only as
-  weaker fallbacks. Episode-specific promos are rejected.
+- Season-specific trailers are rejected entirely, including titles containing
+  `Season`, `S01 Trailer`, `Series 1 Trailer`, `new season`, or `final season`.
+  Episode-specific promos are also rejected, leaving show-level/main trailers.
 - Any playable video already in the show-level `Trailers` folder counts as an
   existing trailer, so the default run does not trample curated media.
 
