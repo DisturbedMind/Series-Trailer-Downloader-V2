@@ -633,6 +633,31 @@ def polite_sleep(seconds: float) -> None:
     time.sleep(max(0.0, seconds + random.uniform(-jitter, jitter)))
 
 
+def format_byte_count(value: object) -> str:
+    try:
+        size = float(value or 0)
+    except (TypeError, ValueError):
+        return "?"
+    units = ("B", "KB", "MB", "GB", "TB")
+    for unit in units:
+        if size < 1024 or unit == units[-1]:
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+    return "?"
+
+
+def format_eta(value: object) -> str:
+    try:
+        seconds = max(0, int(value))
+    except (TypeError, ValueError):
+        return "?"
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours:d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:d}:{seconds:02d}"
+
+
 def series_key(series: SeriesFolder) -> str:
     try:
         return str(series.folder.resolve()).lower()
@@ -1655,6 +1680,12 @@ def score_candidate(series: SeriesFolder, entry: dict, max_duration: int) -> int
     if not any(word in haystack for word in TRAILER_WORDS):
         return None
 
+    if any(
+        marker in haystack
+        for marker in ("subbed", "with subtitles", "english subtitles", "closed captions", "hardcoded subtitles")
+    ) or re.search(r"\[(?:cc|sub|subbed)\]", haystack):
+        return None
+
     if re.search(r"\b(?:s\d{1,2}e\d{1,3}|episode\s+\d+)\b", haystack):
         return None
 
@@ -1992,12 +2023,18 @@ def run_ffmpeg(command: list[str], cancel_event: threading.Event | None = None) 
         text=True,
         **NO_WINDOW_SUBPROCESS,
     )
+    started = time.monotonic()
+    next_update = started + 8
     while True:
         try:
             check_cancel(cancel_event)
             stdout, stderr = process.communicate(timeout=0.2)
             break
         except subprocess.TimeoutExpired:
+            now = time.monotonic()
+            if now >= next_update:
+                print(f"      FFmpeg working | elapsed {format_eta(now - started)}")
+                next_update = now + 10
             continue
         except CancelledByUser:
             process.kill()
@@ -2094,6 +2131,7 @@ def convert_to_normalized_mp4(
         "0:v:0",
         "-map",
         "0:a:0?",
+        "-sn",
     ]
     tail_command = ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
     encoder_options = ffmpeg_video_encoder_option_sets(encoder, preset, crf)
@@ -2101,6 +2139,7 @@ def convert_to_normalized_mp4(
 
     for encoder_label, video_options in encoder_options:
         command = base_command + video_options + tail_command
+        print(f"      FFmpeg encoder: {encoder_label}; normalizing audio")
         try:
             run_ffmpeg(command + ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11", str(output)], cancel_event)
             return output
@@ -2108,6 +2147,7 @@ def convert_to_normalized_mp4(
             last_error = exc
             if output.exists():
                 output.unlink()
+            print(f"      audio-normalized pass failed; retrying {encoder_label} without normalization")
             try:
                 run_ffmpeg(command + [str(output)], cancel_event)
                 return output
@@ -2136,9 +2176,12 @@ def download_format_option_sets(
         "quiet": True,
         "no_warnings": True,
         "logger": QuietDownloadLogger(),
+        "writesubtitles": False,
+        "writeautomaticsub": False,
+        "embedsubtitles": False,
+        "listsubtitles": False,
+        "progress_hooks": [download_progress_hook(cancel_event)],
     }
-    if cancel_event is not None:
-        common_opts["progress_hooks"] = [cancel_progress_hook(cancel_event)]
     max_height = normalise_max_height(max_height)
     if max_height > 0:
         label = max_height_label(max_height)
@@ -2251,12 +2294,32 @@ def download_direct_media(url: str, output: Path, cancel_event: threading.Event 
             content_type = str(response.headers.get("Content-Type") or "").lower()
             if any(kind in content_type for kind in ("text/html", "text/plain", "application/json", "xml")):
                 raise RuntimeError(f"direct media URL returned non-media content type: {content_type}")
+            try:
+                total_bytes = int(response.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                total_bytes = 0
+            downloaded_bytes = 0
+            last_bucket = -1
+            last_update = time.monotonic()
             while True:
                 check_cancel(cancel_event)
                 chunk = response.read(1024 * 1024)
                 if not chunk:
                     break
                 handle.write(chunk)
+                downloaded_bytes += len(chunk)
+                percent = (downloaded_bytes * 100.0 / total_bytes) if total_bytes else None
+                bucket = int(percent // 10) * 10 if percent is not None else -1
+                now = time.monotonic()
+                if bucket > last_bucket or now - last_update >= 8:
+                    last_bucket = max(last_bucket, bucket)
+                    last_update = now
+                    percent_text = f"{percent:5.1f}%" if percent is not None else "working"
+                    total_text = format_byte_count(total_bytes) if total_bytes else "?"
+                    print(
+                        f"      download {percent_text} | {format_byte_count(downloaded_bytes)} / {total_text}"
+                    )
+            print("      download complete")
     except Exception:
         if output.exists():
             output.unlink(missing_ok=True)
@@ -2980,9 +3043,44 @@ def check_cancel(cancel_event: threading.Event | None) -> None:
         raise CancelledByUser("Cancelled by user")
 
 
-def cancel_progress_hook(cancel_event: threading.Event | None):
-    def hook(_status: dict) -> None:
+def download_progress_hook(cancel_event: threading.Event | None):
+    last_filename = ""
+    last_bucket = -1
+    last_update = 0.0
+
+    def hook(status: dict) -> None:
+        nonlocal last_filename, last_bucket, last_update
         check_cancel(cancel_event)
+
+        state = str(status.get("status") or "")
+        filename = Path(str(status.get("filename") or "download")).name
+        if filename != last_filename:
+            last_filename = filename
+            last_bucket = -1
+            last_update = 0.0
+
+        if state == "downloading":
+            downloaded = int(status.get("downloaded_bytes") or 0)
+            total = int(status.get("total_bytes") or status.get("total_bytes_estimate") or 0)
+            percent = (downloaded * 100.0 / total) if total > 0 else None
+            bucket = int(percent // 10) * 10 if percent is not None else -1
+            now = time.monotonic()
+            if bucket <= last_bucket and now - last_update < 8:
+                return
+
+            last_bucket = max(last_bucket, bucket)
+            last_update = now
+            percent_text = f"{percent:5.1f}%" if percent is not None else "working"
+            total_text = format_byte_count(total) if total else "?"
+            speed = status.get("speed")
+            speed_text = f"{format_byte_count(speed)}/s" if speed else "?"
+            eta_text = format_eta(status.get("eta"))
+            print(
+                f"      download {percent_text} | {format_byte_count(downloaded)} / {total_text} "
+                f"| {speed_text} | ETA {eta_text}"
+            )
+        elif state == "finished":
+            print("      download complete; merging/finalizing streams")
 
     return hook
 

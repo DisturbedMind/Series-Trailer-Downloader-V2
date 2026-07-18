@@ -40,6 +40,8 @@ What carried over from Movie Trailer Downloader V2.0
   fallbacks.
 - FFmpeg media validation, H.264/AAC conversion, loudness normalization, CPU or
   GPU encoding, and original-file fallback when conversion is unavailable.
+- Throttled download progress with percentage, transferred size, speed, ETA,
+  and FFmpeg elapsed-time updates in both the GUI log and CLI.
 - Restartable results history, polite delays, progress logging, clean Ctrl+C /
   GUI cancellation, and temporary-file cleanup.
 - Safe total re-download: current trailers are renamed to `.old`, restored if
@@ -60,6 +62,16 @@ Series-specific matching
   weaker fallbacks. Episode-specific promos are rejected.
 - Any playable video already in the show-level `Trailers` folder counts as an
   existing trailer, so the default run does not trample curated media.
+
+Subtitle handling
+-----------------
+
+Subtitle and automatic-caption downloads are explicitly disabled. The FFmpeg
+output maps only the first video stream and optional first audio stream and also
+uses `-sn`, so embedded subtitle tracks are omitted from the finished MP4.
+Candidates advertised as subbed, captioned, or carrying hardcoded subtitles
+are rejected. Text that is visibly burned into the picture cannot be removed
+reliably, but the title filtering reduces the chance of selecting it.
 
 Requirements
 ------------

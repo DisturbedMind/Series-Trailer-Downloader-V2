@@ -132,6 +132,13 @@ class DiscoveryTests(unittest.TestCase):
                 600,
             )
         )
+        self.assertIsNone(
+            app.score_candidate(
+                self.series,
+                {"title": "The Expanse official trailer [CC]", "channel": "Prime Video", "duration": 120},
+                600,
+            )
+        )
 
     def test_prefers_first_season_over_later_season(self):
         first = app.score_candidate(
@@ -156,6 +163,30 @@ class DiscoveryTests(unittest.TestCase):
 
 
 class ProcessLaunchTests(unittest.TestCase):
+    def test_download_options_report_progress_and_disable_subtitles(self):
+        profiles = app.download_format_option_sets({}, "trailer.%(ext)s")
+        options = profiles[0][1]
+        self.assertFalse(options["writesubtitles"])
+        self.assertFalse(options["writeautomaticsub"])
+        self.assertFalse(options["embedsubtitles"])
+        self.assertEqual(len(options["progress_hooks"]), 1)
+
+        with patch("builtins.print") as output:
+            hook = options["progress_hooks"][0]
+            hook(
+                {
+                    "status": "downloading",
+                    "filename": "trailer.webm",
+                    "downloaded_bytes": 50,
+                    "total_bytes": 100,
+                    "speed": 10,
+                    "eta": 5,
+                }
+            )
+            hook({"status": "finished", "filename": "trailer.webm"})
+        self.assertIn("50.0%", output.call_args_list[0].args[0])
+        self.assertIn("download complete", output.call_args_list[1].args[0])
+
     @patch.object(app.subprocess, "Popen")
     def test_ffmpeg_uses_windows_no_console_flag(self, popen):
         process = popen.return_value
@@ -169,6 +200,19 @@ class ProcessLaunchTests(unittest.TestCase):
             self.assertEqual(kwargs["creationflags"], app.subprocess.CREATE_NO_WINDOW)
         else:
             self.assertNotIn("creationflags", kwargs)
+
+    def test_ffmpeg_output_explicitly_excludes_subtitle_streams(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "source.mkv"
+            output = Path(temp) / "output.mp4"
+            source.write_bytes(b"test")
+            with patch.object(app, "ffmpeg_path", return_value="ffmpeg"), patch.object(app, "run_ffmpeg") as run:
+                app.convert_to_normalized_mp4(source, output)
+
+        command = run.call_args.args[0]
+        self.assertIn("-sn", command)
+        self.assertIn("0:v:0", command)
+        self.assertIn("0:a:0?", command)
 
 
 if __name__ == "__main__":
